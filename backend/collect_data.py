@@ -41,6 +41,7 @@ while cap.isOpened():
             hand_detected = True
             mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
             
+            # Normalise hand landmarks by subtracting location of the wrist
             wrist = hand_landmarks.landmark[0]
             landmarks = []
             for lm in hand_landmarks.landmark:
@@ -56,6 +57,9 @@ while cap.isOpened():
     cv2.imshow("Data Collector", frame)
 
     key = cv2.waitKey(1) & 0xFF
+    # waitKey(1) - returns 32-bit integer representing the pressed key
+    # 0xFF - bitwise mask; last 8-bits represents ASCII value of the presed key
+    
     if key == ord('q'):
         break
     elif key == ord(' '):
