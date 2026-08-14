@@ -42111,3 +42111,5 @@ function mulVectorNumber(v1, num) {
     }
     return result;
 }
+
+export { score };
