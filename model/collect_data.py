@@ -25,6 +25,23 @@ print("="*50)
 
 data_buffer = []
 
+def extract_norm_loc_zoom(hand_landmarks):
+    # Norm_Loc
+    wrist = hand_landmarks.landmark[0]
+    centered = []
+    for lm in hand_landmarks.landmark:
+        centered.append([lm.x - wrist.x, lm.y - wrist.y, lm.z - wrist.z])
+
+    # Norm_Zoom
+    max_val = max(max(abs(pt[0]), abs(pt[1])) for pt in centered)
+    max_val = max(max_val, 1e-6)  # Prevent division by zero
+
+    features = []
+    for pt in centered:
+        features.extend([pt[0] / max_val, pt[1] / max_val, pt[2] / max_val])
+
+    return np.array(features, dtype=np.float32)
+
 while cap.isOpened():
     success, frame = cap.read()
     if not success:
@@ -35,17 +52,14 @@ while cap.isOpened():
     results = hands.process(rgb_frame)
     
     hand_detected = False
+    landmarks = []
 
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
             hand_detected = True
             mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
             
-            # Normalise hand landmarks by subtracting location of the wrist
-            wrist = hand_landmarks.landmark[0]
-            landmarks = []
-            for lm in hand_landmarks.landmark:
-                landmarks.extend([lm.x - wrist.x, lm.y - wrist.y, lm.z - wrist.z])
+            landmarks = extract_norm_loc_zoom(hand_landmarks).tolist()
 
     # Display UI box
     cv2.rectangle(frame, (20, 20), (450, 110), (40, 40, 40), -1)
@@ -57,8 +71,6 @@ while cap.isOpened():
     cv2.imshow("Data Collector", frame)
 
     key = cv2.waitKey(1) & 0xFF
-    # waitKey(1) - returns 32-bit integer representing the pressed key
-    # 0xFF - bitwise mask; last 8-bits represents ASCII value of the presed key
     
     if key == ord('q'):
         break

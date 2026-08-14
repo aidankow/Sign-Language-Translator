@@ -8,6 +8,23 @@ mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.7)
 mp_draw = mp.solutions.drawing_utils
 
+def extract_norm_loc_zoom(hand_landmarks):
+    # Norm_Loc
+    wrist = hand_landmarks.landmark[0]
+    centered = []
+    for lm in hand_landmarks.landmark:
+        centered.append([lm.x - wrist.x, lm.y - wrist.y, lm.z - wrist.z])
+
+    # Norm_Zoom
+    max_val = max(max(abs(pt[0]), abs(pt[1])) for pt in centered)
+    max_val = max(max_val, 1e-6)  # Prevent division by zero
+
+    features = []
+    for pt in centered:
+        features.extend([pt[0] / max_val, pt[1] / max_val, pt[2] / max_val])
+
+    return np.array(features, dtype=np.float32)
+
 def process_frame(frame):
     """Takes an OpenCV frame, processes MediaPipe landmarks, runs prediction, and draws overlays."""
     frame = cv2.flip(frame, 1)
@@ -20,14 +37,9 @@ def process_frame(frame):
         for hand_landmarks in results.multi_hand_landmarks:
             mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-            # Extract 21 landmarks
-            wrist = hand_landmarks.landmark[0]
-            landmarks = []
-            for lm in hand_landmarks.landmark:
-                landmarks.extend([lm.x - wrist.x, lm.y - wrist.y, lm.z - wrist.z])
+            features = extract_norm_loc_zoom(hand_landmarks)
 
-            # Predict letter and get confidence probabilities
-            input_data = np.array([landmarks])
+            input_data = np.array([features])
             probabilities = model.predict_proba(input_data)[0]
             max_index = np.argmax(probabilities)
             
@@ -35,7 +47,6 @@ def process_frame(frame):
             confidence = probabilities[max_index] * 100
             prediction_text = f"{prediction} ({confidence:.1f}%)"
 
-            # Display prediction & confidence overlay on video
             cv2.rectangle(frame, (20, 20), (320, 130), (40, 40, 40), -1)
             cv2.putText(frame, "Prediction & Confidence:", (35, 50), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
