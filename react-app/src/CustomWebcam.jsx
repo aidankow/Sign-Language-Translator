@@ -1,7 +1,7 @@
 import Webcam from "react-webcam";
 
-function CustomWebcam() {
-const videoConstraints = {
+function CustomWebcam(props, ref) {
+    const videoConstraints = {
     width: 640,
     height: 480,
     facingMode: "user",
@@ -10,6 +10,7 @@ const videoConstraints = {
   return (
     <div className="webcam-container">
       <Webcam
+        ref={ref}
         audio={false}
         mirrored={true}
         autoPlay={true}
@@ -22,4 +23,4 @@ const videoConstraints = {
   );
 }
 
-export default CustomWebcam
+export default forwardRef(CustomWebcam)

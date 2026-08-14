@@ -3,30 +3,18 @@ import mediapipe as mp
 import numpy as np
 import joblib
 
-# 1. Load trained model
 model = joblib.load("model.joblib")
-
-# 2. Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.7)
 mp_draw = mp.solutions.drawing_utils
 
-# 3. Open webcam
-cap = cv2.VideoCapture(0)
-
-print("="*50)
-print("REAL-TIME TRANSLATOR STARTED (WITH CONFIDENCE)")
-print("Press 'q' to quit.")
-print("="*50)
-
-while cap.isOpened():
-    success, frame = cap.read()
-    if not success:
-        break
-
+def process_frame(frame):
+    """Takes an OpenCV frame, processes MediaPipe landmarks, runs prediction, and draws overlays."""
     frame = cv2.flip(frame, 1)
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(rgb_frame)
+
+    prediction_text = ""
 
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
@@ -45,6 +33,7 @@ while cap.isOpened():
             
             prediction = model.classes_[max_index]
             confidence = probabilities[max_index] * 100
+            prediction_text = f"{prediction} ({confidence:.1f}%)"
 
             # Display prediction & confidence overlay on video
             cv2.rectangle(frame, (20, 20), (320, 130), (40, 40, 40), -1)
@@ -53,10 +42,25 @@ while cap.isOpened():
             cv2.putText(frame, f"{prediction}  ({confidence:.1f}%)", (35, 95), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
-    cv2.imshow("Sign Language Translator", frame)
+    return frame, prediction_text
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+if __name__ == "__main__":
+    cap = cv2.VideoCapture(0)
+    print("="*50)
+    print("STANDALONE TRANSLATOR STARTED")
+    print("Press 'q' to quit.")
+    print("="*50)
 
-cap.release()
-cv2.destroyAllWindows()
+    while cap.isOpened():
+        success, frame = cap.read()
+        if not success:
+            break
+
+        processed_frame, _ = process_frame(frame)
+        cv2.imshow("Sign Language Translator", processed_frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()

@@ -4,10 +4,8 @@ import CustomWebcam from "./CustomWebcam";
 function App() {
 return (
     <div className="v-box">
-      {/* Title on top */}
       <h2>Sign Language Translator</h2>
 
-      {/* HBox holding Webcam and Text Field side-by-side */}
       <div className="h-box">
         <CustomWebcam />
         
