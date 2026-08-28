@@ -104,6 +104,13 @@ video::-webkit-media-controls-start-playback-button {
   font-size: 16px;
 }
 
+#live-translation {
+  display: "block";
+  margin: "2px 0";
+  font-weight: "400";
+  color: #93c5fd;
+}
+
 .text-panel textarea {
   width: 100%;
   height: 200px;

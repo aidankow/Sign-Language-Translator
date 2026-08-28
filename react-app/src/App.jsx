@@ -6,19 +6,58 @@ import "./App.css";
 import * as modelModule from "./model"; 
 
 const labels = [
-  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
-  'K','L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
-  'T', 'U', 'V', 'W', 'X', 'Y', 'J', 'Z'
+  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+  'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+  'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+  'Y', 'Z'
 ];
+
+function extractNormLocZoom(landmarks, handedness) {
+  // Norm_Loc
+  const wrist = landmarks[0];
+
+  const xMultiplier = (handedness === "Left") ? 1 : -1;
+
+  const centered = landmarks.map(lm => ({
+    x: xMultiplier * (lm.x - wrist.x),
+    y: lm.y - wrist.y,
+    z: lm.z - wrist.z
+  }));
+
+  // Norm_Zoom
+  let maxVal = 0;
+  centered.forEach(pt => {
+    maxVal = Math.max(maxVal, Math.abs(pt.x), Math.abs(pt.y));
+  });
+  maxVal = Math.max(maxVal, 1e-6); // Prevent division by zero
+
+  const features = [];
+  centered.forEach(pt => {
+    features.push(pt.x / maxVal, pt.y / maxVal, pt.z / maxVal);
+  });
+
+  return features;
+}
 
 function App() {
   const webcamRef = useRef(null);
   const handLandmarkerRef = useRef(null);
-  const [translation, setTranslation] = useState("Initializing...");
-  const [handSize, setHandSize] = useState(0);
+  const [liveText, setLiveText] = useState("...");
+  const [translation, setTranslation] = useState("");
   const [errorLog, setErrorLog] = useState(null);
 
+  const lastSignRef = useRef("");
+  const consecutiveFramesRef = useRef(0);
+  const hasAddedRef = useRef(false);
+  const STABILITY_THRESHOLD = 15;
+
   const predictFunc = modelModule.score || modelModule.default;
+
+  const handleKeyDown = (e) => {
+    if (e.key !== "Backspace" && e.key !== "Delete" && e.key) {
+      e.preventDefault();
+    }
+  };
 
   useEffect(() => {
     async function runMediaPipe() {
@@ -28,12 +67,10 @@ function App() {
           return;
         }
 
-        setTranslation("Loading MediaPipe WASM...");
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
         );
 
-        setTranslation("Creating Hand Landmarker...");
         handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
@@ -43,7 +80,6 @@ function App() {
           numHands: 1,
         });
 
-        setTranslation("Ready. Show your sign!");
         predictionLoop();
       } catch (err) {
         console.error(err);
@@ -72,41 +108,48 @@ function App() {
             lastVideoTime = video.currentTime;
             const results = handLandmarkerRef.current.detectForVideo(video, performance.now());
 
-            if (results.landmarks && results.landmarks.length > 0) {
-              const landmarks = results.landmarks[0];
-              const wrist = landmarks[0];
-              const middleMcp = landmarks[9];
+          if (results.landmarks && results.landmarks.length > 0) {
+              const handLandmarks = results.landmarks[0];
+
+              const handedness = results.handedness[0][0].categoryName;
               
-              const currentSize = Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y);
-              setHandSize(currentSize);
+              const features = extractNormLocZoom(handLandmarks, handedness);
+              const prediction = predictFunc(features);
 
-              // const MAX_SIZE = 0.3;
-              // const MIN_SIZE = 0.16;
+              const maxScore = Math.max(...prediction);
+              const maxIndex = prediction.indexOf(maxScore);
 
-              // if (currentSize > MAX_SIZE) {
-              //   setTranslation("⚠️ Move further away from the camera");
-              //   requestAnimationFrame(loop);
-              //   return;
-              // } else if (currentSize < MIN_SIZE) {
-              //   setTranslation("⚠️ Move closer to the camera");
-              //   requestAnimationFrame(loop);
-              //   return;
-              // }
+              const detectedLabel = maxScore > 0.55 ? labels[maxIndex] : "Uncertain";
 
-              const features = landmarks.flatMap((pt) => [
-                pt.x - wrist.x, 
-                pt.y - wrist.y, 
-                pt.z - wrist.z
-              ]);
+              setLiveText(`${detectedLabel} (${maxScore.toFixed(2)})`);
 
-              const predictionArray = predictFunc(features);
-
-              const maxScore = Math.max(...predictionArray);
-              const maxIndex = predictionArray.indexOf(maxScore);
-
-              const detectedLabel = maxScore > 0.3 ? labels[maxIndex] : "Uncertain";
-
-              setTranslation(`Detected: ${detectedLabel} (Score: ${maxScore.toFixed(2)})`);
+              // --- SYMBOL COLLECTION LOGIC ---
+              if (detectedLabel !== "Uncertain") {
+                if (detectedLabel === lastSignRef.current) {
+                  if (!hasAddedRef.current) {
+                    consecutiveFramesRef.current += 1;
+                    if (consecutiveFramesRef.current >= STABILITY_THRESHOLD) {
+                      setTranslation((prev) => prev + detectedLabel);
+                      hasAddedRef.current = true; // Lock so it only adds once per hold
+                    }
+                  }
+                } else {
+                  // User switched to a new sign
+                  lastSignRef.current = detectedLabel;
+                  consecutiveFramesRef.current = 1;
+                  hasAddedRef.current = false;
+                }
+              } else {
+                // Hand is uncertain / out of frame
+                lastSignRef.current = "";
+                consecutiveFramesRef.current = 0;
+                hasAddedRef.current = false;
+              }
+            } else {
+              setLiveText("No hand detected");
+              lastSignRef.current = "";
+              consecutiveFramesRef.current = 0;
+              hasAddedRef.current = false;
             }
           }
         }
@@ -138,17 +181,15 @@ function App() {
         
         <div className="text-panel">
           <label htmlFor="translation">Translated Text:</label>
+          <label id="live-translation">Detected: {liveText}</label>
           <textarea
             id="translation"
             value={translation}
+            onChange={(e) => setTranslation(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Your translated sign language will appear here..."
-            readOnly
           />
         </div>
-      </div>
-
-      <div style={{ marginTop: "10px", fontSize: "14px", color: "#666" }}>
-        Live Hand Size Value: <strong>{handSize.toFixed(3)}</strong>
       </div>
     </div>
   );
