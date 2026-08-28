@@ -87,6 +87,9 @@ while cap.isOpened():
     elif 65 <= key <= 90:
         current_label = chr(key)
         print(f"Switched label to: {current_label}")
+    elif key == ord('-'):
+        current_label = "Space"
+        print(f"Switched label to: Space")
 
 cap.release()
 cv2.destroyAllWindows()

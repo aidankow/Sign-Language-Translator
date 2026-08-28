@@ -8,7 +8,7 @@ import * as modelModule from "./model";
 const labels = [
   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
   'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-  'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+  'Q', 'R', 'S', 'Space', 'T', 'U', 'V', 'W', 'X',
   'Y', 'Z'
 ];
 
@@ -129,7 +129,11 @@ function App() {
                   if (!hasAddedRef.current) {
                     consecutiveFramesRef.current += 1;
                     if (consecutiveFramesRef.current >= STABILITY_THRESHOLD) {
-                      setTranslation((prev) => prev + detectedLabel);
+                      if (detectedLabel == 'Space') {
+                        setTranslation((prev) => prev + ' ');
+                      } else {
+                        setTranslation((prev) => prev + detectedLabel);
+                      }
                       hasAddedRef.current = true; // Lock so it only adds once per hold
                     }
                   }
