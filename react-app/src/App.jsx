@@ -91,98 +91,89 @@ function App() {
     runMediaPipe();
   }, [predictFunc]);
 
-  const predictionLoop = () => {
-    let lastVideoTime = -1;
-    // Create an offscreen canvas to safely bypass WebGL video-texture bugs
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+const predictionLoop = () => {
+  let lastVideoTime = -1;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  let isProcessing = false; // <--- Prevents frame flooding and queue deadlocks
 
-    const loop = async () => {
-      try {
-        if (
-          webcamRef.current &&
-          webcamRef.current.video &&
-          handLandmarkerRef.current &&
-          predictFunc
-        ) {
-          const video = webcamRef.current.video;
+  const loop = async () => {
+    if (!handLandmarkerRef.current) return;
 
-          // SAFETY CHECK: Ensures the video stream is actually rendering dimensions
-          if (video.videoWidth === 0 || video.videoHeight === 0) {
-            requestAnimationFrame(loop);
-            return;
-          }
-          
-          if (video.currentTime !== lastVideoTime && video.readyState >= 2) {
-            lastVideoTime = video.currentTime;
+    // Only process the next frame if the previous one has finished
+    if (!isProcessing && webcamRef.current && webcamRef.current.video && predictFunc) {
+      const video = webcamRef.current.video;
 
-            // Sync canvas dimensions with video stream
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        if (video.currentTime !== lastVideoTime && video.readyState >= 2) {
+          lastVideoTime = video.currentTime;
+          isProcessing = true; // Lock
+
+          try {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            
-            // Draw current video frame to canvas
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Pass the canvas object instead of the raw video element to MediaPipe
-            const results = handLandmarkerRef.current.detectForVideo(canvas, performance.now());
+            if (handLandmarkerRef.current) {
+              const results = handLandmarkerRef.current.detectForVideo(canvas, performance.now());
 
-            if (results.landmarks && results.landmarks.length > 0) {
-              const handLandmarks = results.landmarks[0];
+              if (results.landmarks && results.landmarks.length > 0) {
+                const handLandmarks = results.landmarks[0];
+                const handedness = results.handedness[0][0].categoryName;
 
-              const handedness = results.handedness[0][0].categoryName;
-              
-              const features = extractNormLocZoom(handLandmarks, handedness);
-              const prediction = predictFunc(features);
+                const features = extractNormLocZoom(handLandmarks, handedness);
+                const prediction = predictFunc(features);
 
-              const maxScore = Math.max(...prediction);
-              const maxIndex = prediction.indexOf(maxScore);
+                const maxScore = Math.max(...prediction);
+                const maxIndex = prediction.indexOf(maxScore);
 
-              const detectedLabel = maxScore > 0.55 ? labels[maxIndex] : "Uncertain";
+                const detectedLabel = maxScore > 0.55 ? labels[maxIndex] : "Uncertain";
 
-              setLiveText(`${detectedLabel} (${maxScore.toFixed(2)})`);
+                setLiveText(`${detectedLabel} (${maxScore.toFixed(2)})`);
 
-              // --- SYMBOL COLLECTION LOGIC ---
-              if (detectedLabel !== "Uncertain") {
-                if (detectedLabel === lastSignRef.current) {
-                  if (!hasAddedRef.current) {
-                    consecutiveFramesRef.current += 1;
-                    if (consecutiveFramesRef.current >= STABILITY_THRESHOLD) {
-                      if (detectedLabel == 'Space') {
-                        setTranslation((prev) => prev + ' ');
-                      } else {
-                        setTranslation((prev) => prev + detectedLabel);
+                if (detectedLabel !== "Uncertain") {
+                  if (detectedLabel === lastSignRef.current) {
+                    if (!hasAddedRef.current) {
+                      consecutiveFramesRef.current += 1;
+                      if (consecutiveFramesRef.current >= STABILITY_THRESHOLD) {
+                        if (detectedLabel === 'Space') {
+                          setTranslation((prev) => prev + ' ');
+                        } else {
+                          setTranslation((prev) => prev + detectedLabel);
+                        }
+                        hasAddedRef.current = true;
                       }
-                      hasAddedRef.current = true; // Lock so it only adds once per hold
                     }
+                  } else {
+                    lastSignRef.current = detectedLabel;
+                    consecutiveFramesRef.current = 1;
+                    hasAddedRef.current = false;
                   }
                 } else {
-                  // User switched to a new sign
-                  lastSignRef.current = detectedLabel;
-                  consecutiveFramesRef.current = 1;
+                  lastSignRef.current = "";
+                  consecutiveFramesRef.current = 0;
                   hasAddedRef.current = false;
                 }
               } else {
-                // Hand is uncertain / out of frame
+                setLiveText("No hand detected");
                 lastSignRef.current = "";
                 consecutiveFramesRef.current = 0;
                 hasAddedRef.current = false;
               }
-            } else {
-              setLiveText("No hand detected");
-              lastSignRef.current = "";
-              consecutiveFramesRef.current = 0;
-              hasAddedRef.current = false;
             }
+          } catch (loopErr) {
+            console.warn("Skipping frame due to graphics glitch:", loopErr);
+          } finally {
+            isProcessing = false; // Unlock so the next frame can run
           }
         }
-      } catch (loopErr) {
-        console.warn("Skipping frame due to graphics glitch:", loopErr);
       }
-      requestAnimationFrame(loop);
-    };
-
+    }
     requestAnimationFrame(loop);
   };
+
+  requestAnimationFrame(loop);
+};
 
   if (errorLog) {
     return (
