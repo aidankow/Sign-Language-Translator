@@ -60,8 +60,6 @@ function App() {
   };
 
   useEffect(() => {
-    let isMounted = true;
-
     async function runMediaPipe() {
       try {
         if (!predictFunc) {
@@ -70,7 +68,7 @@ function App() {
         }
 
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm"
         );
 
         handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
@@ -82,39 +80,21 @@ function App() {
           numHands: 1,
         });
 
-        if (isMounted) {
-          handLandmarkerRef.current = landmarker;
-          predictionLoop();
-        } else {
-          landmarker.close(); // Clean up if component unmounted during load
-        }
+        predictionLoop();
       } catch (err) {
         console.error(err);
-        if (isMounted) {
-          setErrorLog(err.message);
-          setTranslation("Error during initialization.");
-        }
+        setErrorLog(err.message);
+        setTranslation("Error during initialization.");
       }
     }
 
     runMediaPipe();
-
-    // CLEANUP FUNCTION
-    return () => {
-      isMounted = false;
-      if (handLandmarkerRef.current) {
-        handLandmarkerRef.current.close();
-        handLandmarkerRef.current = null;
-      }
-    };
   }, [predictFunc]);
 
   const predictionLoop = () => {
     let lastVideoTime = -1;
 
     const loop = async () => {
-      if (!handLandmarkerRef.current) return;
-      
       try {
         if (
           webcamRef.current &&
