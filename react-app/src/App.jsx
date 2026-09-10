@@ -71,12 +71,13 @@ function App() {
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm"
         );
 
+        // Switched to "IMAGE" mode to bypass WebGL activeTexture video stream binding bugs
         handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
             delegate: "CPU",
           },
-          runningMode: "VIDEO",
+          runningMode: "IMAGE",
           numHands: 1,
         });
 
@@ -95,19 +96,18 @@ const predictionLoop = () => {
   let lastVideoTime = -1;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
-  let isProcessing = false; // <--- Prevents frame flooding and queue deadlocks
+  let isProcessing = false;
 
   const loop = async () => {
     if (!handLandmarkerRef.current) return;
 
-    // Only process the next frame if the previous one has finished
     if (!isProcessing && webcamRef.current && webcamRef.current.video && predictFunc) {
       const video = webcamRef.current.video;
 
       if (video.videoWidth > 0 && video.videoHeight > 0) {
         if (video.currentTime !== lastVideoTime && video.readyState >= 2) {
           lastVideoTime = video.currentTime;
-          isProcessing = true; // Lock
+          isProcessing = true;
 
           try {
             canvas.width = video.videoWidth;
@@ -115,7 +115,8 @@ const predictionLoop = () => {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             if (handLandmarkerRef.current) {
-              const results = handLandmarkerRef.current.detectForVideo(canvas, performance.now());
+              // Using .detect() instead of .detectForVideo() for IMAGE running mode
+              const results = handLandmarkerRef.current.detect(canvas);
 
               if (results.landmarks && results.landmarks.length > 0) {
                 const handLandmarks = results.landmarks[0];
@@ -164,7 +165,7 @@ const predictionLoop = () => {
           } catch (loopErr) {
             console.warn("Skipping frame due to graphics glitch:", loopErr);
           } finally {
-            isProcessing = false; // Unlock so the next frame can run
+            isProcessing = false;
           }
         }
       }
