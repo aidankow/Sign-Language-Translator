@@ -110,7 +110,7 @@ function App() {
             return;
           }
           
-          if (video.currentTime !== lastVideoTime && video.readyState === 4) {
+          if (video.currentTime !== lastVideoTime && video.readyState >= 2) {
             lastVideoTime = video.currentTime;
             const results = handLandmarkerRef.current.detectForVideo(video, performance.now());
 
