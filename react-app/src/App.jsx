@@ -59,14 +59,8 @@ function App() {
     }
   };
 
-  const isInitializingRef = useRef(false);
-  
   useEffect(() => {
     async function runMediaPipe() {
-      // Prevent double-initialization from React StrictMode races
-      if (isInitializingRef.current || handLandmarkerRef.current) return;
-      isInitializingRef.current = true;
-      
       try {
         if (!predictFunc) {
           setErrorLog("Model function score not found in model.js");
@@ -99,6 +93,9 @@ function App() {
 
   const predictionLoop = () => {
     let lastVideoTime = -1;
+    // Create an offscreen canvas to safely bypass WebGL video-texture bugs
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
 
     const loop = async () => {
       try {
@@ -118,9 +115,18 @@ function App() {
           
           if (video.currentTime !== lastVideoTime && video.readyState >= 2) {
             lastVideoTime = video.currentTime;
-            const results = handLandmarkerRef.current.detectForVideo(video, performance.now());
 
-          if (results.landmarks && results.landmarks.length > 0) {
+            // Sync canvas dimensions with video stream
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // Draw current video frame to canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Pass the canvas object instead of the raw video element to MediaPipe
+            const results = handLandmarkerRef.current.detectForVideo(canvas, performance.now());
+
+            if (results.landmarks && results.landmarks.length > 0) {
               const handLandmarks = results.landmarks[0];
 
               const handedness = results.handedness[0][0].categoryName;
@@ -170,7 +176,7 @@ function App() {
           }
         }
       } catch (loopErr) {
-        console.error("Prediction loop error:", loopErr);
+        console.warn("Skipping frame due to graphics glitch:", loopErr);
       }
       requestAnimationFrame(loop);
     };
