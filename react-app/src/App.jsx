@@ -76,7 +76,7 @@ function App() {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
             delegate: "CPU",
           },
-          runningMode: "VIDEO",
+          runningMode: "IMAGE",
           numHands: 1,
         });
 
@@ -93,6 +93,8 @@ function App() {
 
   const predictionLoop = () => {
     let lastVideoTime = -1;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
 
     const loop = async () => {
       try {
@@ -104,13 +106,18 @@ function App() {
         ) {
           const video = webcamRef.current.video;
           
-          if (video.currentTime !== lastVideoTime && video.readyState === 4) {
+          if (video.currentTime !== lastVideoTime && video.readyState >= 2) {
             lastVideoTime = video.currentTime;
-            const results = handLandmarkerRef.current.detectForVideo(video, performance.now());
 
-          if (results.landmarks && results.landmarks.length > 0) {
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Use .detect() with a canvas element instead of detectForVideo
+            const results = handLandmarkerRef.current.detect(canvas);
+
+            if (results.landmarks && results.landmarks.length > 0) {
               const handLandmarks = results.landmarks[0];
-
               const handedness = results.handedness[0][0].categoryName;
               
               const features = extractNormLocZoom(handLandmarks, handedness);
@@ -123,28 +130,25 @@ function App() {
 
               setLiveText(`${detectedLabel} (${maxScore.toFixed(2)})`);
 
-              // --- SYMBOL COLLECTION LOGIC ---
               if (detectedLabel !== "Uncertain") {
                 if (detectedLabel === lastSignRef.current) {
                   if (!hasAddedRef.current) {
                     consecutiveFramesRef.current += 1;
                     if (consecutiveFramesRef.current >= STABILITY_THRESHOLD) {
-                      if (detectedLabel == 'Space') {
+                      if (detectedLabel === 'Space') {
                         setTranslation((prev) => prev + ' ');
                       } else {
                         setTranslation((prev) => prev + detectedLabel);
                       }
-                      hasAddedRef.current = true; // Lock so it only adds once per hold
+                      hasAddedRef.current = true;
                     }
                   }
                 } else {
-                  // User switched to a new sign
                   lastSignRef.current = detectedLabel;
                   consecutiveFramesRef.current = 1;
                   hasAddedRef.current = false;
                 }
               } else {
-                // Hand is uncertain / out of frame
                 lastSignRef.current = "";
                 consecutiveFramesRef.current = 0;
                 hasAddedRef.current = false;
