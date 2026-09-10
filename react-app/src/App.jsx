@@ -4,6 +4,8 @@ import CustomWebcam from "./CustomWebcam";
 import "./App.css";
 
 import * as modelModule from "./model"; 
+// Import your local asset here (adjust relative path if App.jsx is nested differently)
+import fingerspellingImg from "./assets/fingerspelling.png";
 
 const labels = [
   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
@@ -42,8 +44,8 @@ function App() {
   const [liveText, setLiveText] = useState("...");
   const [translation, setTranslation] = useState("");
   const [errorLog, setErrorLog] = useState(null);
+  const [showChart, setShowChart] = useState(false);
   
-  // Safe default initialization check for WebGL support
   const [isHwAccelerated, setIsHwAccelerated] = useState(() => {
     try {
       const canvas = document.createElement("canvas");
@@ -84,7 +86,7 @@ function App() {
         handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-            delegate: "CPU",
+            delegate: "GPU",
           },
           runningMode: "VIDEO",
           numHands: 1,
@@ -218,6 +220,10 @@ function App() {
         <CustomWebcam ref={webcamRef} />
         
         <div className="text-panel">
+          <button className="chart-btn" onClick={() => setShowChart(true)}>
+            View ASL Alphabet Chart
+          </button>
+          
           <label htmlFor="translation">Translated Text:</label>
           <label id="live-translation">Detected: {liveText}</label>
           <textarea
@@ -229,6 +235,23 @@ function App() {
           />
         </div>
       </div>
+
+      {/* ASL Chart Modal Popup */}
+      {showChart && (
+        <div className="modal-overlay" onClick={() => setShowChart(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>American Sign Language (ASL) Alphabet</h3>
+            <img 
+              src={fingerspellingImg} 
+              alt="ASL Fingerspelling Chart" 
+            />
+            <br />
+            <button className="close-btn" onClick={() => setShowChart(false)}>
+              Close Chart
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
