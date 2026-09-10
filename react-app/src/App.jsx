@@ -103,6 +103,12 @@ function App() {
           predictFunc
         ) {
           const video = webcamRef.current.video;
+
+          // SAFETY CHECK: Ensures the video stream is actually rendering dimensions
+          if (video.videoWidth === 0 || video.videoHeight === 0) {
+            requestAnimationFrame(loop);
+            return;
+          }
           
           if (video.currentTime !== lastVideoTime && video.readyState === 4) {
             lastVideoTime = video.currentTime;
