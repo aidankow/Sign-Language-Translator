@@ -13,9 +13,7 @@ const labels = [
 ];
 
 function extractNormLocZoom(landmarks, handedness) {
-  // Norm_Loc
   const wrist = landmarks[0];
-
   const xMultiplier = (handedness === "Left") ? 1 : -1;
 
   const centered = landmarks.map(lm => ({
@@ -24,12 +22,11 @@ function extractNormLocZoom(landmarks, handedness) {
     z: lm.z - wrist.z
   }));
 
-  // Norm_Zoom
   let maxVal = 0;
   centered.forEach(pt => {
     maxVal = Math.max(maxVal, Math.abs(pt.x), Math.abs(pt.y));
   });
-  maxVal = Math.max(maxVal, 1e-6); // Prevent division by zero
+  maxVal = Math.max(maxVal, 1e-6);
 
   const features = [];
   centered.forEach(pt => {
@@ -45,6 +42,17 @@ function App() {
   const [liveText, setLiveText] = useState("...");
   const [translation, setTranslation] = useState("");
   const [errorLog, setErrorLog] = useState(null);
+  
+  // Safe default initialization check for WebGL support
+  const [isHwAccelerated, setIsHwAccelerated] = useState(() => {
+    try {
+      const canvas = document.createElement("canvas");
+      const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+      return !!gl;
+    } catch (e) {
+      return false;
+    }
+  });
 
   const lastSignRef = useRef("");
   const consecutiveFramesRef = useRef(0);
@@ -60,17 +68,8 @@ function App() {
   };
 
   useEffect(() => {
-    try {
-      const canvas = document.createElement("canvas");
-      const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
-      if (!gl) {
-        setIsHwAccelerated(false);
-        return;
-      }
-    } catch (e) {
-      setIsHwAccelerated(false);
-      return;
-    }
+    if (!isHwAccelerated) return;
+
     async function runMediaPipe() {
       try {
         if (!predictFunc) {
@@ -94,18 +93,16 @@ function App() {
         predictionLoop();
       } catch (err) {
         console.error(err);
-        // Catch Chrome GPU service or activeTexture crashes and show the warning
-        if (err.message.includes("kGpuService") || err.message.includes("activeTexture")) {
+        if (err.message && (err.message.includes("kGpuService") || err.message.includes("activeTexture"))) {
           setIsHwAccelerated(false);
         } else {
           setErrorLog(err.message);
         }
-        setTranslation("Error during initialization.");
       }
     }
 
     runMediaPipe();
-  }, [predictFunc]);
+  }, [isHwAccelerated, predictFunc]);
 
   const predictionLoop = () => {
     let lastVideoTime = -1;
@@ -124,9 +121,8 @@ function App() {
             lastVideoTime = video.currentTime;
             const results = handLandmarkerRef.current.detectForVideo(video, performance.now());
 
-          if (results.landmarks && results.landmarks.length > 0) {
+            if (results.landmarks && results.landmarks.length > 0) {
               const handLandmarks = results.landmarks[0];
-
               const handedness = results.handedness[0][0].categoryName;
               
               const features = extractNormLocZoom(handLandmarks, handedness);
@@ -139,28 +135,25 @@ function App() {
 
               setLiveText(`${detectedLabel} (${maxScore.toFixed(2)})`);
 
-              // --- SYMBOL COLLECTION LOGIC ---
               if (detectedLabel !== "Uncertain") {
                 if (detectedLabel === lastSignRef.current) {
                   if (!hasAddedRef.current) {
                     consecutiveFramesRef.current += 1;
                     if (consecutiveFramesRef.current >= STABILITY_THRESHOLD) {
-                      if (detectedLabel == 'Space') {
+                      if (detectedLabel === 'Space') {
                         setTranslation((prev) => prev + ' ');
                       } else {
                         setTranslation((prev) => prev + detectedLabel);
                       }
-                      hasAddedRef.current = true; // Lock so it only adds once per hold
+                      hasAddedRef.current = true;
                     }
                   }
                 } else {
-                  // User switched to a new sign
                   lastSignRef.current = detectedLabel;
                   consecutiveFramesRef.current = 1;
                   hasAddedRef.current = false;
                 }
               } else {
-                // Hand is uncertain / out of frame
                 lastSignRef.current = "";
                 consecutiveFramesRef.current = 0;
                 hasAddedRef.current = false;
@@ -181,6 +174,31 @@ function App() {
 
     requestAnimationFrame(loop);
   };
+
+  if (!isHwAccelerated) {
+    return (
+      <div style={{ padding: "40px", textAlign: "center", maxWidth: "600px", margin: "auto", fontFamily: "sans-serif" }}>
+        <div style={{ background: "#fff3cd", border: "1px solid #ffeeba", color: "#856404", padding: "20px", borderRadius: "8px" }}>
+          <h3 style={{ margin: "0 0 10px 0" }}>⚠️ Graphics Acceleration Required</h3>
+          <p style={{ lineHeight: "1.5" }}>
+            This application requires <b>Graphics (Hardware) Acceleration</b> to be enabled in your browser settings to process hand tracking via MediaPipe.
+          </p>
+          <hr style={{ border: "0", borderTop: "1px solid #ffeeba", margin: "15px 0" }} />
+          <div style={{ textAlign: "left", fontSize: "14px", margin: "0" }}>
+            <strong>How to fix in Google Chrome:</strong>
+            <ol style={{ paddingLeft: "20px", margin: "5px 0 0 0" }}>
+              <li>Go to Chrome Settings (<code>chrome://settings/system</code>)</li>
+              <li>Turn on <b>"Use graphics acceleration when available"</b></li>
+              <li>Relaunch Chrome and reload this page</li>
+            </ol>
+          </div>
+          <p style={{ marginTop: "15px", fontSize: "14px" }}>
+            <em>Alternatively, you can open and run this app smoothly in <b>Safari</b>.</em>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (errorLog) {
     return (
