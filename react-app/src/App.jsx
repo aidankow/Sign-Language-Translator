@@ -59,8 +59,14 @@ function App() {
     }
   };
 
+  const isInitializingRef = useRef(false);
+  
   useEffect(() => {
     async function runMediaPipe() {
+      // Prevent double-initialization from React StrictMode races
+      if (isInitializingRef.current || handLandmarkerRef.current) return;
+      isInitializingRef.current = true;
+      
       try {
         if (!predictFunc) {
           setErrorLog("Model function score not found in model.js");
