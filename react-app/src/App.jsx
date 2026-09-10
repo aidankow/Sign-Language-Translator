@@ -90,18 +90,31 @@ function App() {
         }
       } catch (err) {
         console.error(err);
-        setErrorLog(err.message);
-        setTranslation("Error during initialization.");
+        if (isMounted) {
+          setErrorLog(err.message);
+          setTranslation("Error during initialization.");
+        }
       }
     }
 
     runMediaPipe();
+
+    // CLEANUP FUNCTION
+    return () => {
+      isMounted = false;
+      if (handLandmarkerRef.current) {
+        handLandmarkerRef.current.close();
+        handLandmarkerRef.current = null;
+      }
+    };
   }, [predictFunc]);
 
   const predictionLoop = () => {
     let lastVideoTime = -1;
 
     const loop = async () => {
+      if (!handLandmarkerRef.current) return;
+      
       try {
         if (
           webcamRef.current &&
