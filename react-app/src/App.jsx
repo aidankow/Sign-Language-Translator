@@ -60,6 +60,8 @@ function App() {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     async function runMediaPipe() {
       try {
         if (!predictFunc) {
@@ -80,7 +82,12 @@ function App() {
           numHands: 1,
         });
 
-        predictionLoop();
+        if (isMounted) {
+          handLandmarkerRef.current = landmarker;
+          predictionLoop();
+        } else {
+          landmarker.close(); // Clean up if component unmounted during load
+        }
       } catch (err) {
         console.error(err);
         setErrorLog(err.message);
